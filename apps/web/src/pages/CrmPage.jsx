@@ -119,6 +119,7 @@ export default function CrmPage({
   formatReviewStatus,
   handleCreateCrmPreview,
   handleCrmFieldValueChange,
+  handleOpenAmoConnect,
   handleResolveCrmReview,
   handleSendCrmPreview,
   handleToggleCrmField,
@@ -174,6 +175,14 @@ export default function CrmPage({
               и отправить одобренные поля.
             </p>
           </div>
+
+          {handleOpenAmoConnect ? (
+            <div className="action-row">
+              <button className="button-ghost" onClick={handleOpenAmoConnect} type="button">
+                Подключить или проверить amoCRM
+              </button>
+            </div>
+          ) : null}
 
           <div className="module-stats-grid">
             <article className="module-stat-card">

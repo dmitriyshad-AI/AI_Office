@@ -1122,6 +1122,66 @@ button:disabled {
   font-size: 0.88rem;
 }
 
+.success-banner {
+  border: 1px solid rgba(126, 219, 132, 0.34);
+  border-radius: 12px;
+  background: rgba(126, 219, 132, 0.1);
+  color: #b8f2c6;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+
+.integration-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.integration-button-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.integration-button-host {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(7, 16, 28, 0.6);
+}
+
+.integration-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.integration-detail-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(7, 16, 28, 0.6);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.integration-detail-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.integration-detail-card strong {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .log-box {
   margin: 8px 0 0;
   padding: 10px;
@@ -1439,6 +1499,10 @@ button:disabled {
   .calls-detail-grid,
   .calls-field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .integration-details-grid {
+    grid-template-columns: 1fr;
   }
 
   .grid-main {

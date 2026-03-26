@@ -97,6 +97,14 @@ describe("App integration", () => {
     expect(await screen.findByText("Отчёт директора о прогрессе")).toBeInTheDocument();
   });
 
+  it("renders amo integration route with external oauth setup", async () => {
+    renderApp("/integrations/amocrm");
+
+    expect(await screen.findByText("Подключение amoCRM через внешнюю интеграцию")).toBeInTheDocument();
+    expect(screen.getByText("Официальный запуск внешней интеграции")).toBeInTheDocument();
+    expect(screen.getByText("https://api.fotonai.online/api/integrations/amocrm/callback")).toBeInTheDocument();
+  });
+
   it("renders crm route and sends selected preview", async () => {
     renderApp("/crm", { enableSendPreview: true });
 

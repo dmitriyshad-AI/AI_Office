@@ -3,6 +3,7 @@ export const OFFICE_NAV_ITEMS = [
   { id: "team", path: "/team", label: "Команда" },
   { id: "runs", path: "/runs", label: "Запуски" },
   { id: "events", path: "/events", label: "События" },
+  { id: "integrations", path: "/integrations/amocrm", label: "Интеграции" },
   { id: "approvals", path: "/approvals", label: "Одобрения" },
   { id: "artifacts", path: "/artifacts", label: "Артефакты" },
 ];

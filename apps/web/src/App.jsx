@@ -40,6 +40,7 @@ import {
   summarizeEventPayload,
 } from "./appShared";
 import ApprovalsPage from "./pages/ApprovalsPage";
+import AmoConnectPage from "./pages/AmoConnectPage";
 import ArtifactsPage from "./pages/ArtifactsPage";
 import CallsPage from "./pages/CallsPage";
 import CrmPage from "./pages/CrmPage";
@@ -1375,6 +1376,11 @@ function App() {
           />
 
           <Route
+            path="/integrations/amocrm"
+            element={<AmoConnectPage />}
+          />
+
+          <Route
             path="/approvals"
             element={(
               <ApprovalsPage
@@ -1428,6 +1434,7 @@ function App() {
                 formatReviewStatus={formatReviewStatus}
                 handleCreateCrmPreview={handleCreateCrmPreview}
                 handleCrmFieldValueChange={handleCrmFieldValueChange}
+                handleOpenAmoConnect={() => navigate("/integrations/amocrm")}
                 handleResolveCrmReview={handleResolveCrmReview}
                 handleSendCrmPreview={handleSendCrmPreview}
                 handleToggleCrmField={handleToggleCrmField}

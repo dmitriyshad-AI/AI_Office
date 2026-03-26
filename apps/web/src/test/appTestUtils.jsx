@@ -444,6 +444,38 @@ export function installFetchMock({
     runLog: deepClone(data.runLog),
     crmPreviews: noProjects ? [] : deepClone(data.crmPreviews),
     callInsights: noProjects ? [] : deepClone(data.callInsights),
+    amoIntegrationStatus: {
+      integration_mode: "external",
+      redirect_uri: "https://api.fotonai.online/api/integrations/amocrm/callback",
+      secrets_uri: "https://api.fotonai.online/api/integrations/amocrm/secrets",
+      scopes: ["crm"],
+      integration_name: "AI Office",
+      integration_description: "Интеграция AI Office для безопасной записи данных в amoCRM.",
+      logo_url: null,
+      account_base_url_hint: "https://educent.amocrm.ru",
+      button_snippet:
+        '<script class="amocrm_oauth" charset="utf-8" data-name="AI Office" data-description="Интеграция AI Office для безопасной записи данных в amoCRM." data-redirect_uri="https://api.fotonai.online/api/integrations/amocrm/callback" data-secrets_uri="https://api.fotonai.online/api/integrations/amocrm/secrets" data-logo="" data-scopes="crm" data-title="Подключить amoCRM" data-mode="popup" src="https://www.amocrm.ru/auth/button.min.js"></script>',
+      connected: false,
+      status: "not_connected",
+      account_base_url: "https://educent.amocrm.ru",
+      account_subdomain: "educent",
+      client_id_present: false,
+      client_secret_present: false,
+      access_token_present: false,
+      refresh_token_present: false,
+      authorized_at: null,
+      expires_at: null,
+      last_error: null,
+      contact_field_catalog_synced_at: null,
+      contact_field_count: 0,
+      required_contact_fields_present: [],
+      required_contact_fields_missing: [
+        "Id Tallanto",
+        "Филиал Tallanto",
+        "Баланс Tallanto",
+      ],
+      token_source: null,
+    },
   };
 
   if (crmPreviewPending && state.crmPreviews[0]) {
@@ -469,6 +501,33 @@ export function installFetchMock({
 
     if (path === "/health" && method === "GET") {
       return createJsonResponse(data.health);
+    }
+
+    if (path === "/api/integrations/amocrm/status" && method === "GET") {
+      return createJsonResponse(state.amoIntegrationStatus);
+    }
+
+    if (path === "/api/integrations/amocrm/contact-fields/sync" && method === "POST") {
+      state.amoIntegrationStatus = {
+        ...state.amoIntegrationStatus,
+        connected: true,
+        status: "connected",
+        client_id_present: true,
+        client_secret_present: true,
+        access_token_present: true,
+        refresh_token_present: true,
+        token_source: "oauth",
+        contact_field_catalog_synced_at: NOW,
+        contact_field_count: 14,
+        required_contact_fields_present: ["Id Tallanto", "Филиал Tallanto"],
+        required_contact_fields_missing: ["Баланс Tallanto"],
+      };
+      return createJsonResponse({
+        status: "ok",
+        summary: "Каталог полей контактов amoCRM синхронизирован.",
+        field_count: 14,
+        synced_at: NOW,
+      });
     }
 
     if (path === "/projects" && method === "GET") {
