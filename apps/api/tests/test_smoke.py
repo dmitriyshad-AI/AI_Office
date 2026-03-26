@@ -52,6 +52,7 @@ def build_test_client(
     monkeypatch.setenv("DIRECTOR_STALE_RUN_GRACE_SECONDS", "10")
 
     for module_name in [
+        "app.amo_integration",
         "app.config",
         "app.auth",
         "app.db",
@@ -68,6 +69,7 @@ def build_test_client(
         "app.crm_bridge",
         "app.action_intents",
         "app.director_heartbeat",
+        "app.routers.integrations",
         "app.routers.projects",
     ]:
         sys.modules.pop(module_name, None)
@@ -1894,13 +1896,34 @@ def test_crm_amo_http_mode_uses_review_queue_before_controlled_write(tmp_path, m
     requests = []
 
     def fake_urlopen(request, timeout=0):
+        url = request.full_url
+        body = request.data.decode("utf-8", errors="ignore") if request.data else ""
         requests.append(
             {
-                "url": request.full_url,
+                "url": url,
                 "method": request.get_method(),
-                "data": request.data.decode("utf-8", errors="ignore"),
+                "data": body,
             }
         )
+        if "/api/v4/contacts/custom_fields" in url:
+            return _JsonResponse(
+                {
+                    "_embedded": {
+                        "custom_fields": [
+                            {"id": 101, "name": "Id Tallanto", "type": "text"},
+                            {"id": 102, "name": "Авто история общения", "type": "text"},
+                            {"id": 103, "name": "AI-приоритет", "type": "text"},
+                            {"id": 104, "name": "AI-рекомендованный следующий шаг", "type": "text"},
+                            {"id": 105, "name": "Последняя AI-сводка", "type": "text"},
+                            {"id": 106, "name": "Филиал Tallanto", "type": "text"},
+                            {"id": 107, "name": "Баланс Tallanto", "type": "numeric"},
+                            {"id": 108, "name": "Пополнено Tallanto", "type": "numeric"},
+                            {"id": 109, "name": "Списано Tallanto", "type": "numeric"},
+                            {"id": 110, "name": "Статус матчинга", "type": "text"},
+                        ]
+                    }
+                }
+            )
         return _JsonResponse({"result": "ok"})
 
     monkeypatch.setattr(crm_bridge.url_request, "urlopen", fake_urlopen)
@@ -1937,7 +1960,11 @@ def test_crm_amo_http_mode_uses_review_queue_before_controlled_write(tmp_path, m
 
     resolve_response = client.post(
         f"/projects/{project_id}/crm/review-queue/{preview_id}/resolve",
-        json={"outcome": "approved", "summary": "Проверка полей завершена."},
+        json={
+            "outcome": "approved",
+            "summary": "Проверка полей завершена.",
+            "amo_entity_id": "75807689",
+        },
     )
     assert resolve_response.status_code == 200
     assert resolve_response.json()["preview"]["review_status"] == "approved"
@@ -1949,7 +1976,8 @@ def test_crm_amo_http_mode_uses_review_queue_before_controlled_write(tmp_path, m
     assert second_send.status_code == 200
     assert second_send.json()["preview"]["status"] == "sent"
     assert any(item["method"] == "PATCH" for item in requests)
-    assert any("Id Tallanto" in item["data"] for item in requests)
+    assert any("/api/v4/contacts/custom_fields" in item["url"] for item in requests)
+    assert any(item["url"].endswith("/api/v4/contacts/75807689") for item in requests if item["method"] == "PATCH")
 
 
 def test_crm_review_queue_keeps_family_case_in_operator_backlog(tmp_path, monkeypatch):
@@ -2091,13 +2119,30 @@ def test_call_insight_review_queue_and_controlled_send(tmp_path, monkeypatch):
     requests = []
 
     def fake_urlopen(request, timeout=0):
+        url = request.full_url
+        body = request.data.decode("utf-8", errors="ignore") if request.data else ""
         requests.append(
             {
-                "url": request.full_url,
+                "url": url,
                 "method": request.get_method(),
-                "data": request.data.decode("utf-8", errors="ignore"),
+                "data": body,
             }
         )
+        if "/api/v4/contacts/custom_fields" in url:
+            return _JsonResponse(
+                {
+                    "_embedded": {
+                        "custom_fields": [
+                            {"id": 101, "name": "Id Tallanto", "type": "text"},
+                            {"id": 102, "name": "Авто история общения", "type": "text"},
+                            {"id": 103, "name": "AI-приоритет", "type": "text"},
+                            {"id": 104, "name": "AI-рекомендованный следующий шаг", "type": "text"},
+                            {"id": 105, "name": "Последняя AI-сводка", "type": "text"},
+                            {"id": 110, "name": "Статус матчинга", "type": "text"},
+                        ]
+                    }
+                }
+            )
         return _JsonResponse({"result": "ok"})
 
     monkeypatch.setattr(crm_bridge.url_request, "urlopen", fake_urlopen)
@@ -2160,7 +2205,8 @@ def test_call_insight_review_queue_and_controlled_send(tmp_path, monkeypatch):
     assert sent_insight["status"] == "sent"
     assert sent_insight["sent_by"] == "director"
     assert any(item["method"] == "PATCH" for item in requests)
-    assert any("Авто история общения" in item["data"] for item in requests)
+    assert any("/api/v4/contacts/custom_fields" in item["url"] for item in requests)
+    assert any(item["url"].endswith("/api/v4/contacts/75807689") for item in requests if item["method"] == "PATCH")
 
     artifacts = client.get(f"/projects/{project_id}/artifacts")
     assert artifacts.status_code == 200

@@ -9,6 +9,7 @@ from urllib import error as url_error
 from urllib import parse as url_parse
 from urllib import request as url_request
 
+from app.amo_integration import AmoIntegrationError, send_contact_custom_field_update
 from app.config import get_settings
 from app.models import Artifact, CrmSyncPreview, Project, utc_now
 from app.orchestration import log_event
@@ -871,6 +872,7 @@ def create_crm_sync_preview(
 
 
 def _send_to_amo(
+    session,
     *,
     amo_entity_type: str,
     amo_entity_id: Optional[str],
@@ -885,41 +887,40 @@ def _send_to_amo(
             "result": "ok",
         }
 
-    if not settings.crm_amo_base_url:
-        raise CrmBridgeError("CRM_AMO_BASE_URL is not configured.", status_code=503)
-    if not settings.crm_amo_api_token:
-        raise CrmBridgeError("CRM_AMO_API_TOKEN is not configured.", status_code=503)
+    if amo_entity_type != "contact":
+        raise CrmBridgeError(
+            "Controlled AMO writer currently supports only contact records.",
+            status_code=409,
+        )
+    if amo_entity_id is None or not str(amo_entity_id).strip():
+        raise CrmBridgeError(
+            "Controlled AMO writer requires an explicit AMO contact ID.",
+            status_code=409,
+        )
+    try:
+        contact_id = int(str(amo_entity_id).strip())
+    except ValueError as exc:
+        raise CrmBridgeError("AMO contact ID must be numeric.", status_code=400) from exc
 
     try:
-        path = settings.crm_amo_upsert_path.format(
-            entity_type=amo_entity_type,
-            entity_id=url_parse.quote(str(amo_entity_id or ""), safe=""),
+        return send_contact_custom_field_update(
+            session,
+            contact_id=contact_id,
+            field_payload=field_payload,
         )
-    except KeyError as exc:
-        raise CrmBridgeError(
-            "CRM_AMO_UPSERT_PATH must use placeholders {entity_type} and/or {entity_id}.",
-            status_code=500,
-        ) from exc
-    url = _build_url(settings.crm_amo_base_url, path)
-    return _http_json_request(
-        method="PATCH",
-        url=url,
-        headers={"Authorization": f"Bearer {settings.crm_amo_api_token}"},
-        body={
-            "entity_type": amo_entity_type,
-            "entity_id": amo_entity_id,
-            "fields": field_payload,
-        },
-    )
+    except AmoIntegrationError as exc:
+        raise CrmBridgeError(str(exc), status_code=exc.status_code) from exc
 
 
 def send_amo_field_payload(
+    session,
     *,
     amo_entity_type: str,
     amo_entity_id: Optional[str],
     field_payload: dict[str, object],
 ) -> dict:
     return _send_to_amo(
+        session,
         amo_entity_type=amo_entity_type,
         amo_entity_id=amo_entity_id,
         field_payload=field_payload,
@@ -1025,6 +1026,7 @@ def send_crm_sync_preview(
     else:
         try:
             result_payload = send_amo_field_payload(
+                session=session,
                 amo_entity_type=preview.amo_entity_type,
                 amo_entity_id=preview.amo_entity_id,
                 field_payload=field_payload,

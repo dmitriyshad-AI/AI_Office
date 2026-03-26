@@ -455,6 +455,7 @@ def test_http_transport_fetch_and_analysis_cover_error_branches(monkeypatch):
 
 
 def test_send_to_amo_and_create_preview_edge_cases(monkeypatch):
+    session = make_session()
     monkeypatch.setattr(
         crm_bridge_module,
         "settings",
@@ -467,6 +468,7 @@ def test_send_to_amo_and_create_preview_edge_cases(monkeypatch):
         ),
     )
     mock_payload = _send_to_amo(
+        session,
         amo_entity_type="contact",
         amo_entity_id="123",
         field_payload={"Id Tallanto": "student-1"},
@@ -485,27 +487,19 @@ def test_send_to_amo_and_create_preview_edge_cases(monkeypatch):
         ),
     )
     with pytest.raises(CrmBridgeError):
-        _send_to_amo(amo_entity_type="contact", amo_entity_id="123", field_payload={"x": 1})
+        _send_to_amo(session, amo_entity_type="lead", amo_entity_id="123", field_payload={"x": 1})
 
-    monkeypatch.setattr(
-        crm_bridge_module,
-        "settings",
-        SimpleNamespace(
-            crm_amo_mode="http",
-            crm_amo_base_url="https://educent.amocrm.ru/api/v4",
-            crm_amo_api_token="token",
-            crm_amo_upsert_path="/contacts/{broken}",
-            crm_amo_contact_field_map=None,
-        ),
-    )
     with pytest.raises(CrmBridgeError):
-        _send_to_amo(amo_entity_type="contact", amo_entity_id="123", field_payload={"x": 1})
+        _send_to_amo(session, amo_entity_type="contact", amo_entity_id=None, field_payload={"x": 1})
 
-    captured = {}
     monkeypatch.setattr(
         crm_bridge_module,
-        "_http_json_request",
-        lambda **kwargs: captured.update(kwargs) or {"ok": True},
+        "send_contact_custom_field_update",
+        lambda session_arg, contact_id, field_payload: {
+            "ok": True,
+            "contact_id": contact_id,
+            "field_payload": field_payload,
+        },
     )
     monkeypatch.setattr(
         crm_bridge_module,
@@ -518,12 +512,9 @@ def test_send_to_amo_and_create_preview_edge_cases(monkeypatch):
             crm_amo_contact_field_map=None,
         ),
     )
-    result = _send_to_amo(amo_entity_type="contact", amo_entity_id="123", field_payload={"x": 1})
-    assert result == {"ok": True}
-    assert captured["method"] == "PATCH"
-    assert captured["body"]["entity_id"] == "123"
+    result = _send_to_amo(session, amo_entity_type="contact", amo_entity_id="123", field_payload={"x": 1})
+    assert result == {"ok": True, "contact_id": 123, "field_payload": {"x": 1}}
 
-    session = make_session()
     project = Project(name="CRM", description="Test project")
     session.add(project)
     session.commit()

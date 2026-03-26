@@ -25,6 +25,10 @@ except ImportError:  # pragma: no cover - depends on runtime dependencies
 settings = get_settings()
 
 
+def _is_image_not_found_exception(exc: Exception) -> bool:
+    return exc.__class__.__name__ == "ImageNotFound"
+
+
 def _api_runtime_is_containerized() -> bool:
     return Path("/.dockerenv").exists()
 
@@ -121,7 +125,7 @@ def _check_container_runtime(workspace: TaskWorkspace, environment: TaskEnvironm
 
     try:
         client = docker.from_env(timeout=20)
-    except DockerException as exc:
+    except Exception as exc:
         checks.append(
             PreflightCheck(
                 key="docker.daemon",
@@ -142,7 +146,7 @@ def _check_container_runtime(workspace: TaskWorkspace, environment: TaskEnvironm
                     message="Docker daemon is reachable from API runtime.",
                 )
             )
-        except DockerException as exc:
+        except Exception as exc:
             checks.append(
                 PreflightCheck(
                     key="docker.daemon",
@@ -162,44 +166,46 @@ def _check_container_runtime(workspace: TaskWorkspace, environment: TaskEnvironm
                     message=f"Task container image is available: {image_name}.",
                 )
             )
-        except ImageNotFound:
-            build_context = Path(settings.task_container_image_build_context)
-            dockerfile = _resolve_dockerfile_path(
-                build_context,
-                settings.task_container_image_dockerfile,
-            )
-            if settings.task_container_image_auto_build and dockerfile.exists():
-                checks.append(
-                    PreflightCheck(
-                        key="task_image.available",
-                        status="warn",
-                        message=(
-                            f"Task image {image_name} is missing and will be auto-built from "
-                            f"{dockerfile} on first run."
-                        ),
-                    )
-                )
-            else:
+        except Exception as exc:
+            if not _is_image_not_found_exception(exc):
                 checks.append(
                     PreflightCheck(
                         key="task_image.available",
                         status="fail",
-                        message=(
-                            f"Task image {image_name} is missing and auto-build is not ready "
-                            f"(context={build_context}, dockerfile={dockerfile})."
-                        ),
+                        message=f"Failed to inspect task image {image_name}: {exc}",
                         blocking=True,
                     )
                 )
-        except DockerException as exc:
-            checks.append(
-                PreflightCheck(
-                    key="task_image.available",
-                    status="fail",
-                    message=f"Failed to inspect task image {image_name}: {exc}",
-                    blocking=True,
+                image_name = None
+            else:
+                build_context = Path(settings.task_container_image_build_context)
+                dockerfile = _resolve_dockerfile_path(
+                    build_context,
+                    settings.task_container_image_dockerfile,
                 )
-            )
+                if settings.task_container_image_auto_build and dockerfile.exists():
+                    checks.append(
+                        PreflightCheck(
+                            key="task_image.available",
+                            status="warn",
+                            message=(
+                                f"Task image {image_name} is missing and will be auto-built from "
+                                f"{dockerfile} on first run."
+                            ),
+                        )
+                    )
+                else:
+                    checks.append(
+                        PreflightCheck(
+                            key="task_image.available",
+                            status="fail",
+                            message=(
+                                f"Task image {image_name} is missing and auto-build is not ready "
+                                f"(context={build_context}, dockerfile={dockerfile})."
+                            ),
+                            blocking=True,
+                        )
+                    )
     finally:
         client.close()
 

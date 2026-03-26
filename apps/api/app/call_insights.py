@@ -392,11 +392,12 @@ def send_call_insight_to_amo(
     if field_overrides:
         for raw_key, raw_value in field_overrides.items():
             key = str(raw_key).strip()
-            if key:
+            if key and key in field_payload:
                 field_payload[key] = raw_value
 
     try:
         result_payload = send_amo_field_payload(
+            session=session,
             amo_entity_type="contact",
             amo_entity_id=str(insight.matched_amo_contact_id),
             field_payload=field_payload,

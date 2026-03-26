@@ -22,10 +22,12 @@ def load_main_module(monkeypatch, tmp_path, *, api_key="test-key", auto_run=Fals
     monkeypatch.setenv("DIRECTOR_HEARTBEAT_POLL_SECONDS", "1")
 
     for module_name in [
+        "app.amo_integration",
         "app.config",
         "app.db",
         "app.director_heartbeat",
         "app.main",
+        "app.routers.integrations",
         "app.routers.projects",
     ]:
         sys.modules.pop(module_name, None)

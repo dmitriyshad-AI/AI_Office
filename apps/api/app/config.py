@@ -62,6 +62,13 @@ class Settings:
     crm_amo_api_token: Optional[str]
     crm_amo_upsert_path: str
     crm_amo_contact_field_map: Optional[str]
+    crm_amo_oauth_redirect_uri: Optional[str]
+    crm_amo_oauth_secrets_uri: Optional[str]
+    crm_amo_oauth_scopes: Tuple[str, ...]
+    crm_amo_oauth_name: str
+    crm_amo_oauth_description: str
+    crm_amo_oauth_logo_url: Optional[str]
+    crm_amo_oauth_account_base_url: Optional[str]
     crm_analysis_mode: str
 
 
@@ -217,5 +224,15 @@ def get_settings() -> Settings:
             "/contacts/{entity_id}",
         ),
         crm_amo_contact_field_map=os.getenv("CRM_AMO_CONTACT_FIELD_MAP") or None,
+        crm_amo_oauth_redirect_uri=os.getenv("CRM_AMO_OAUTH_REDIRECT_URI") or None,
+        crm_amo_oauth_secrets_uri=os.getenv("CRM_AMO_OAUTH_SECRETS_URI") or None,
+        crm_amo_oauth_scopes=_parse_csv(os.getenv("CRM_AMO_OAUTH_SCOPES", "crm")),
+        crm_amo_oauth_name=os.getenv("CRM_AMO_OAUTH_NAME", "AI Office"),
+        crm_amo_oauth_description=os.getenv(
+            "CRM_AMO_OAUTH_DESCRIPTION",
+            "Интеграция AI Office для безопасной записи данных в amoCRM.",
+        ),
+        crm_amo_oauth_logo_url=os.getenv("CRM_AMO_OAUTH_LOGO_URL") or None,
+        crm_amo_oauth_account_base_url=os.getenv("CRM_AMO_OAUTH_ACCOUNT_BASE_URL") or None,
         crm_analysis_mode=os.getenv("CRM_ANALYSIS_MODE", "heuristic"),
     )

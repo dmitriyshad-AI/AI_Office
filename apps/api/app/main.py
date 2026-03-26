@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.director_heartbeat import director_heartbeat_service
+from app.routers.integrations import router as integrations_router
 from app.routers.projects import router as project_router
 
 
@@ -29,13 +30,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://api.fotonai.online",
+    ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|api\.fotonai\.online)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(integrations_router, prefix="/api")
 app.include_router(project_router)
 
 

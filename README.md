@@ -171,6 +171,11 @@ Runtime isolation now also depends on `SOURCE_WORKSPACE_ROOT`:
 - `GET /projects/{id}/crm/previews`
 - `GET /projects/{id}/crm/previews/{previewId}`
 - `POST /projects/{id}/crm/previews/{previewId}/send`
+- `GET /api/integrations/amocrm/status`
+- `POST /api/integrations/amocrm/refresh`
+- `POST /api/integrations/amocrm/contact-fields/sync`
+- `POST /api/integrations/amocrm/secrets`
+- `GET /api/integrations/amocrm/callback`
 
 ## CRM Bridge V1 (Tallanto -> AMO)
 
@@ -178,7 +183,9 @@ Runtime isolation now also depends on `SOURCE_WORKSPACE_ROOT`:
 - `CRM_AMO_MODE=mock|http` controls destination write mode for AMO.
 - `CRM_ANALYSIS_MODE=heuristic|codex` controls preview analysis mode.
 - In `mock` mode the bridge is fully local and safe for UI testing.
-- In `http` mode set `CRM_TALLANTO_BASE_URL`, `CRM_TALLANTO_API_TOKEN`, `CRM_TALLANTO_STUDENT_PATH`, `CRM_AMO_BASE_URL`, `CRM_AMO_API_TOKEN`, and `CRM_AMO_UPSERT_PATH`.
+- In `http` mode set `CRM_TALLANTO_BASE_URL`, `CRM_TALLANTO_API_TOKEN`, `CRM_TALLANTO_STUDENT_PATH`, and either:
+  - direct `CRM_AMO_BASE_URL + CRM_AMO_API_TOKEN`, or
+  - external OAuth settings `CRM_AMO_OAUTH_REDIRECT_URI + CRM_AMO_OAUTH_SECRETS_URI`.
 - Tallanto HTTP mode is now implemented against the real `rest.php` API:
   - auth header: `X-Auth-Token`
   - endpoint path default: `/service/api/rest.php`
@@ -193,6 +200,35 @@ Runtime isolation now also depends on `SOURCE_WORKSPACE_ROOT`:
   - already sent preview cannot be sent again (use a new preview for repeated transfer)
   - in `CRM_AMO_MODE=http`, AMO writes are escalated to human approval policy
   - API responses and CRM artifacts redact sensitive source/canonical payload fields
+
+## External amoCRM OAuth (server callback mode)
+
+Use this mode when amoCRM must call back to your public server, while the rest of the office still runs from your MacBook.
+
+Set in `.env`:
+
+```bash
+CRM_AMO_MODE=http
+CRM_AMO_BASE_URL=https://educent.amocrm.ru
+CRM_AMO_OAUTH_REDIRECT_URI=https://api.fotonai.online/api/integrations/amocrm/callback
+CRM_AMO_OAUTH_SECRETS_URI=https://api.fotonai.online/api/integrations/amocrm/secrets
+CRM_AMO_OAUTH_SCOPES=crm
+CRM_AMO_OAUTH_NAME=AI Office
+CRM_AMO_OAUTH_DESCRIPTION=Интеграция AI Office для безопасной записи данных в amoCRM.
+CRM_AMO_OAUTH_ACCOUNT_BASE_URL=https://educent.amocrm.ru
+```
+
+Then:
+
+1. Deploy the server build and verify:
+   - `GET /api/integrations/amocrm/status`
+   - `POST /api/integrations/amocrm/secrets`
+   - `GET /api/integrations/amocrm/callback`
+2. In the amoCRM external integration button/config use:
+   - `redirect_uri = https://api.fotonai.online/api/integrations/amocrm/callback`
+   - `secrets_uri = https://api.fotonai.online/api/integrations/amocrm/secrets`
+3. After authorization, call `POST /api/integrations/amocrm/contact-fields/sync` once.
+4. CRM/Calls controlled write will then use the stored OAuth token and resolve custom field IDs from `GET /api/v4/contacts/custom_fields`.
 
 ## Local development without Docker
 
