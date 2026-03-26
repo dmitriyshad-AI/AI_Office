@@ -79,3 +79,16 @@ def test_lifespan_starts_and_stops_heartbeat_service_once(tmp_path, monkeypatch)
         assert calls == ["start"]
 
     assert calls == ["start", "stop"]
+
+
+def test_amo_integration_routes_are_available_with_and_without_api_prefix(tmp_path, monkeypatch):
+    main_module = load_main_module(monkeypatch, tmp_path)
+
+    with TestClient(main_module.app) as client:
+        prefixed = client.get("/api/integrations/amocrm/callback")
+        compat = client.get("/integrations/amocrm/callback")
+
+        assert prefixed.status_code == 400
+        assert compat.status_code == 400
+        assert "параметр code" in prefixed.text
+        assert "параметр code" in compat.text

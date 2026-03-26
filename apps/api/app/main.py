@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(integrations_router, prefix="/api")
+app.include_router(integrations_router, include_in_schema=False)
 app.include_router(project_router)
 
 
