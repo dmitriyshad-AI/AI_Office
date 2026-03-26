@@ -1,0 +1,221 @@
+import os
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Tuple
+
+
+def _normalize_database_url(url: str) -> str:
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
+@dataclass(frozen=True)
+class Settings:
+    api_key: Optional[str]
+    api_keys: Tuple[str, ...]
+    stream_token_ttl_seconds: int
+    stream_token_secret: Optional[str]
+    database_url: str
+    db_pool_size: int
+    db_max_overflow: int
+    db_pool_timeout_seconds: int
+    db_pool_recycle_seconds: int
+    redis_url: str
+    api_host: str
+    api_port: int
+    runtime_root: str
+    source_workspace_root: str
+    task_container_driver: str
+    task_container_image: str
+    task_container_image_build_context: str
+    task_container_image_dockerfile: str
+    task_container_image_auto_build: bool
+    task_container_workdir: str
+    task_container_network: str
+    task_container_name_prefix: str
+    task_container_codex_command: str
+    task_container_codex_sandbox: str
+    task_container_codex_home_host_path: Optional[str]
+    task_container_codex_home_container_path: str
+    task_container_codex_home_runtime_path: str
+    task_container_codex_home_copy_allowlist: Tuple[str, ...]
+    task_container_env_passthrough: Tuple[str, ...]
+    codex_cli_path: str
+    codex_worker_mode: str
+    director_auto_run_enabled: bool
+    director_auto_max_attempts: int
+    director_heartbeat_enabled: bool
+    director_heartbeat_poll_seconds: int
+    director_heartbeat_max_dispatch_per_tick: int
+    director_stale_run_grace_seconds: int
+    director_stale_run_auto_retry_window_seconds: int
+    codex_model: Optional[str]
+    codex_execution_timeout_seconds: int
+    crm_tallanto_mode: str
+    crm_tallanto_base_url: Optional[str]
+    crm_tallanto_api_token: Optional[str]
+    crm_tallanto_student_path: str
+    crm_amo_mode: str
+    crm_amo_base_url: Optional[str]
+    crm_amo_api_token: Optional[str]
+    crm_amo_upsert_path: str
+    crm_amo_contact_field_map: Optional[str]
+    crm_analysis_mode: str
+
+
+def _normalize_path(value: str) -> str:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return str(path.resolve())
+
+
+def _default_source_workspace_root() -> str:
+    repo_candidate = Path(__file__).resolve().parents[3]
+    if any((repo_candidate / marker).exists() for marker in ("package.json", "docker-compose.yml", ".git")):
+        return str(repo_candidate)
+    return str(Path(__file__).resolve().parents[1])
+
+
+def _parse_bool(value: Optional[str], default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _parse_csv(value: Optional[str]) -> Tuple[str, ...]:
+    if not value:
+        return tuple()
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def get_settings() -> Settings:
+    source_workspace_root = os.getenv("SOURCE_WORKSPACE_ROOT")
+    if not source_workspace_root:
+        source_workspace_root = _default_source_workspace_root()
+    else:
+        normalized_source_root = _normalize_path(source_workspace_root)
+        if Path(normalized_source_root).exists():
+            source_workspace_root = normalized_source_root
+        else:
+            source_workspace_root = _default_source_workspace_root()
+
+    return Settings(
+        api_key=os.getenv("AI_OFFICE_API_KEY") or None,
+        api_keys=_parse_csv(os.getenv("AI_OFFICE_API_KEYS")),
+        stream_token_ttl_seconds=int(os.getenv("AI_OFFICE_STREAM_TOKEN_TTL_SECONDS", "120")),
+        stream_token_secret=os.getenv("AI_OFFICE_STREAM_TOKEN_SECRET") or None,
+        database_url=_normalize_database_url(
+            os.getenv("DATABASE_URL", "sqlite:///./ai_office.db")
+        ),
+        db_pool_size=max(1, int(os.getenv("DB_POOL_SIZE", "20"))),
+        db_max_overflow=max(0, int(os.getenv("DB_MAX_OVERFLOW", "20"))),
+        db_pool_timeout_seconds=max(1, int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "30"))),
+        db_pool_recycle_seconds=max(30, int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800"))),
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        api_host=os.getenv("API_HOST", "0.0.0.0"),
+        api_port=int(os.getenv("API_PORT", "8000")),
+        runtime_root=_normalize_path(os.getenv("RUNTIME_ROOT", "./runtime")),
+        source_workspace_root=str(Path(source_workspace_root).resolve()),
+        task_container_driver=os.getenv("TASK_CONTAINER_DRIVER", "process"),
+        task_container_image=os.getenv("TASK_CONTAINER_IMAGE", "ai-office-task-runner:latest"),
+        task_container_image_build_context=_normalize_path(
+            os.getenv("TASK_CONTAINER_IMAGE_BUILD_CONTEXT", source_workspace_root)
+        ),
+        task_container_image_dockerfile=os.getenv(
+            "TASK_CONTAINER_IMAGE_DOCKERFILE",
+            "apps/task-runner/Dockerfile",
+        ),
+        task_container_image_auto_build=_parse_bool(
+            os.getenv("TASK_CONTAINER_IMAGE_AUTO_BUILD"),
+            True,
+        ),
+        task_container_workdir=os.getenv("TASK_CONTAINER_WORKDIR", "/task"),
+        task_container_network=os.getenv("TASK_CONTAINER_NETWORK", "none"),
+        task_container_name_prefix=os.getenv("TASK_CONTAINER_NAME_PREFIX", "ai-office-task"),
+        task_container_codex_command=os.getenv("TASK_CONTAINER_CODEX_COMMAND", "codex"),
+        task_container_codex_sandbox=os.getenv(
+            "TASK_CONTAINER_CODEX_SANDBOX",
+            "workspace-write",
+        ),
+        task_container_codex_home_host_path=(
+            os.getenv("TASK_CONTAINER_CODEX_HOME_HOST_PATH") or None
+        ),
+        task_container_codex_home_container_path=os.getenv(
+            "TASK_CONTAINER_CODEX_HOME_CONTAINER_PATH",
+            "/task/.codex-source",
+        ),
+        task_container_codex_home_runtime_path=os.getenv(
+            "TASK_CONTAINER_CODEX_HOME_RUNTIME_PATH",
+            "/task/.codex",
+        ),
+        task_container_codex_home_copy_allowlist=_parse_csv(
+            os.getenv(
+                "TASK_CONTAINER_CODEX_HOME_COPY_ALLOWLIST",
+                "auth.json,config.toml,AGENTS.md,rules,skills,models_cache.json",
+            )
+        ),
+        task_container_env_passthrough=_parse_csv(
+            os.getenv(
+                "TASK_CONTAINER_ENV_PASSTHROUGH",
+                "",
+            )
+        ),
+        codex_cli_path=os.getenv("CODEX_CLI_PATH", shutil.which("codex") or "codex"),
+        codex_worker_mode=os.getenv("CODEX_WORKER_MODE", "mock"),
+        director_auto_run_enabled=_parse_bool(
+            os.getenv("DIRECTOR_AUTO_RUN_ENABLED"),
+            True,
+        ),
+        director_auto_max_attempts=max(
+            1,
+            int(os.getenv("DIRECTOR_AUTO_MAX_ATTEMPTS", "3")),
+        ),
+        director_heartbeat_enabled=_parse_bool(
+            os.getenv("DIRECTOR_HEARTBEAT_ENABLED"),
+            True,
+        ),
+        director_heartbeat_poll_seconds=max(
+            1,
+            int(os.getenv("DIRECTOR_HEARTBEAT_POLL_SECONDS", "5")),
+        ),
+        director_heartbeat_max_dispatch_per_tick=max(
+            1,
+            int(os.getenv("DIRECTOR_HEARTBEAT_MAX_DISPATCH_PER_TICK", "3")),
+        ),
+        director_stale_run_grace_seconds=max(
+            10,
+            int(os.getenv("DIRECTOR_STALE_RUN_GRACE_SECONDS", "120")),
+        ),
+        director_stale_run_auto_retry_window_seconds=max(
+            0,
+            int(os.getenv("DIRECTOR_STALE_RUN_AUTO_RETRY_WINDOW_SECONDS", "300")),
+        ),
+        codex_model=os.getenv("CODEX_MODEL") or None,
+        codex_execution_timeout_seconds=int(
+            os.getenv("CODEX_EXECUTION_TIMEOUT_SECONDS", "900")
+        ),
+        crm_tallanto_mode=os.getenv("CRM_TALLANTO_MODE", "mock"),
+        crm_tallanto_base_url=os.getenv("CRM_TALLANTO_BASE_URL") or None,
+        crm_tallanto_api_token=os.getenv("CRM_TALLANTO_API_TOKEN") or None,
+        crm_tallanto_student_path=os.getenv(
+            "CRM_TALLANTO_STUDENT_PATH",
+            "/service/api/rest.php",
+        ),
+        crm_amo_mode=os.getenv("CRM_AMO_MODE", "mock"),
+        crm_amo_base_url=os.getenv("CRM_AMO_BASE_URL") or None,
+        crm_amo_api_token=os.getenv("CRM_AMO_API_TOKEN") or None,
+        crm_amo_upsert_path=os.getenv(
+            "CRM_AMO_UPSERT_PATH",
+            "/contacts/{entity_id}",
+        ),
+        crm_amo_contact_field_map=os.getenv("CRM_AMO_CONTACT_FIELD_MAP") or None,
+        crm_analysis_mode=os.getenv("CRM_ANALYSIS_MODE", "heuristic"),
+    )
