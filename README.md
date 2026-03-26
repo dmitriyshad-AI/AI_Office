@@ -230,6 +230,34 @@ Then:
 3. After authorization, call `POST /api/integrations/amocrm/contact-fields/sync` once.
 4. CRM/Calls controlled write will then use the stored OAuth token and resolve custom field IDs from `GET /api/v4/contacts/custom_fields`.
 
+## Deployment
+
+### Manual deploy to the server
+
+1. Create a directory on the server, for example `/opt/ai-office`.
+2. Put a real `.env` file into that directory.
+3. Run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dmitriyshad-AI/AI_Office/main/scripts/deploy_remote.sh -o /tmp/ai-office-deploy.sh
+chmod +x /tmp/ai-office-deploy.sh
+DEPLOY_PATH=/opt/ai-office REPO_URL=https://github.com/dmitriyshad-AI/AI_Office.git BRANCH=main /tmp/ai-office-deploy.sh
+```
+
+The script clones or updates the repository and runs `docker compose up -d --build`.
+
+### GitHub auto-deploy
+
+The repository includes `.github/workflows/deploy.yml`. To enable it, create these repository secrets in GitHub:
+
+- `DEPLOY_HOST`
+- `DEPLOY_PORT`
+- `DEPLOY_USER`
+- `DEPLOY_PATH`
+- `DEPLOY_SSH_KEY`
+
+After that, every push to `main` can deploy the newest version to the server automatically.
+
 ## Local development without Docker
 
 ### API
