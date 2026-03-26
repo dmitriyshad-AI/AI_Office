@@ -109,12 +109,35 @@ export default function AmoConnectPage() {
     if (!script) {
       return undefined;
     }
+
+    // Official amo button script bootstraps from window.onload only once.
+    // In SPA routes we need to trigger that bootstrap manually after the script is fetched.
+    const handleScriptLoad = () => {
+      try {
+        if (typeof window.onload === "function") {
+          window.onload(new Event("load"));
+        }
+      } catch {
+        if (typeof window.onload === "function") {
+          window.onload();
+        }
+      }
+    };
+    script.addEventListener("load", handleScriptLoad, { once: true });
     host.appendChild(script);
 
     return () => {
+      script.removeEventListener("load", handleScriptLoad);
       host.replaceChildren();
     };
-  }, [integrationStatus]);
+  }, [
+    integrationStatus?.redirect_uri,
+    integrationStatus?.secrets_uri,
+    integrationStatus?.integration_name,
+    integrationStatus?.integration_description,
+    integrationStatus?.logo_url,
+    Array.isArray(integrationStatus?.scopes) ? integrationStatus.scopes.join(",") : "",
+  ]);
 
   async function handleRefreshStatus() {
     setRefreshing(true);
