@@ -45,7 +45,7 @@ def make_settings(**overrides):
         "crm_amo_oauth_description": "amo integration",
         "crm_amo_oauth_logo_url": None,
         "crm_amo_oauth_account_base_url": "https://educent.amocrm.ru",
-        "crm_amo_note_allowed_lead_ids": ("49832125",),
+        "crm_amo_note_allowed_lead_ids": ("49832125", "47854947"),
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -501,6 +501,34 @@ def test_create_lead_common_note_uses_oauth_context_and_allowlist(monkeypatch):
             ],
         }
     ]
+
+
+def test_create_lead_common_note_allows_linked_telegram_test_lead(monkeypatch):
+    monkeypatch.setattr(amo_module, "settings", make_settings())
+    session = make_session()
+    requests: list[dict] = []
+
+    monkeypatch.setattr(
+        amo_module,
+        "resolve_amo_access_context",
+        lambda db: amo_module.AmoAccessContext(
+            account_base_url="https://educent.amocrm.ru",
+            access_token="access-token",
+            token_source="oauth",
+            connection=None,
+        ),
+    )
+    monkeypatch.setattr(amo_module, "_amo_http_request", lambda **kwargs: requests.append(kwargs) or {"id": 9002})
+
+    result = create_lead_common_note(
+        session,
+        lead_id=47854947,
+        text="ЧЕРНОВИК БОТА, не отправлено",
+    )
+
+    assert result["lead_id"] == 47854947
+    assert result["note_id"] == 9002
+    assert requests[0]["url"] == "https://educent.amocrm.ru/api/v4/leads/47854947/notes"
 
 
 def test_create_lead_common_note_rejects_non_allowlisted_lead_before_http(monkeypatch):

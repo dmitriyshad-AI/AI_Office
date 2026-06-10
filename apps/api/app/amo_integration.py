@@ -30,7 +30,7 @@ DEFAULT_REQUIRED_AMO_CONTACT_FIELDS = (
     "AI-рекомендованный следующий шаг",
     "Последняя AI-сводка",
 )
-AMO_NOTE_HARD_ALLOWED_LEAD_IDS = frozenset({49832125})
+AMO_NOTE_HARD_ALLOWED_LEAD_IDS = frozenset({49832125, 47854947})
 
 
 class AmoIntegrationError(ValueError):
