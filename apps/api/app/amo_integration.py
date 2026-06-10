@@ -30,6 +30,7 @@ DEFAULT_REQUIRED_AMO_CONTACT_FIELDS = (
     "AI-рекомендованный следующий шаг",
     "Последняя AI-сводка",
 )
+AMO_NOTE_HARD_ALLOWED_LEAD_IDS = frozenset({49832125})
 
 
 class AmoIntegrationError(ValueError):
@@ -97,7 +98,7 @@ def _amo_http_request(
     method: str,
     url: str,
     headers: Optional[dict[str, str]] = None,
-    body: Optional[dict[str, Any]] = None,
+    body: Optional[Any] = None,
     timeout_seconds: int = 25,
 ) -> dict[str, Any]:
     payload = None
@@ -162,6 +163,13 @@ def _contact_update_endpoint(account_base_url: str, contact_id: int) -> str:
     if not normalized:
         raise AmoIntegrationError("AMO account base URL is not configured.", status_code=503)
     return f"{normalized.rstrip('/')}/api/v4/contacts/{contact_id}"
+
+
+def _lead_notes_endpoint(account_base_url: str, lead_id: int) -> str:
+    normalized = _normalize_base_url(account_base_url)
+    if not normalized:
+        raise AmoIntegrationError("AMO account base URL is not configured.", status_code=503)
+    return f"{normalized.rstrip('/')}/api/v4/leads/{lead_id}/notes"
 
 
 def _pick_first_non_empty(payload: dict[str, Any], *keys: str) -> Optional[str]:
@@ -698,6 +706,105 @@ def send_contact_custom_field_update(
     }
 
 
+def _resolve_note_allowed_lead_ids() -> frozenset[int]:
+    raw_values = getattr(settings, "crm_amo_note_allowed_lead_ids", ("49832125",))
+    if isinstance(raw_values, str):
+        raw_items = [item.strip() for item in raw_values.split(",")]
+    else:
+        raw_items = [str(item).strip() for item in raw_values]
+
+    allowed_ids: set[int] = set()
+    invalid_values: list[str] = []
+    for raw_item in raw_items:
+        if not raw_item:
+            continue
+        try:
+            lead_id = int(raw_item)
+        except (TypeError, ValueError):
+            invalid_values.append(raw_item)
+            continue
+        if lead_id <= 0:
+            invalid_values.append(raw_item)
+            continue
+        allowed_ids.add(lead_id)
+
+    if invalid_values:
+        raise AmoIntegrationError(
+            "CRM_AMO_NOTE_ALLOWED_LEAD_IDS contains invalid lead ids.",
+            status_code=503,
+        )
+    if not allowed_ids:
+        raise AmoIntegrationError(
+            "CRM_AMO_NOTE_ALLOWED_LEAD_IDS is empty; note writes are disabled.",
+            status_code=503,
+        )
+    return frozenset(allowed_ids)
+
+
+def _extract_created_note_id(payload: dict[str, Any]) -> Optional[int]:
+    direct_id = payload.get("id")
+    if direct_id is not None:
+        try:
+            return int(direct_id)
+        except (TypeError, ValueError):
+            return None
+
+    embedded = payload.get("_embedded") if isinstance(payload, dict) else None
+    notes = embedded.get("notes") if isinstance(embedded, dict) else None
+    if not isinstance(notes, list) or not notes:
+        return None
+    first_note = notes[0]
+    if not isinstance(first_note, dict):
+        return None
+    raw_note_id = first_note.get("id")
+    if raw_note_id is None:
+        return None
+    try:
+        return int(raw_note_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def create_lead_common_note(
+    session: Session,
+    *,
+    lead_id: int,
+    text: str,
+) -> dict[str, Any]:
+    normalized_lead_id = int(lead_id)
+    if (
+        normalized_lead_id not in AMO_NOTE_HARD_ALLOWED_LEAD_IDS
+        or normalized_lead_id not in _resolve_note_allowed_lead_ids()
+    ):
+        raise AmoIntegrationError(
+            "AMO lead is not allowlisted for note writes.",
+            status_code=403,
+        )
+
+    note_text = str(text or "").strip()
+    if not note_text:
+        raise AmoIntegrationError("AMO note text is empty.", status_code=400)
+    if len(note_text) > 20000:
+        raise AmoIntegrationError("AMO note text is too long.", status_code=400)
+
+    context = resolve_amo_access_context(session)
+    result = _amo_http_request(
+        method="POST",
+        url=_lead_notes_endpoint(context.account_base_url, normalized_lead_id),
+        headers={"Authorization": f"Bearer {context.access_token}"},
+        body=[{"note_type": "common", "params": {"text": note_text}}],
+    )
+    return {
+        "mode": "amo_api",
+        "account_base_url": context.account_base_url,
+        "token_source": context.token_source,
+        "entity_type": "lead",
+        "lead_id": normalized_lead_id,
+        "note_id": _extract_created_note_id(result),
+        "amo_response": result,
+    }
+
+
 def get_amo_connection_status(session: Session) -> dict[str, Any]:
     connection = get_active_connection(session)
     setup = build_external_oauth_setup()
@@ -750,4 +857,3 @@ def get_amo_connection_status(session: Session) -> dict[str, Any]:
         "required_contact_fields_missing": required_missing,
         "token_source": "oauth",
     }
-

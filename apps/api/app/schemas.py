@@ -293,6 +293,19 @@ class AmoContactFieldSyncResponse(BaseModel):
     synced_at: Optional[datetime]
 
 
+class AmoLeadNoteCreateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class AmoLeadNoteCreateResponse(BaseModel):
+    status: str
+    summary: str
+    lead_id: int
+    note_id: Optional[int]
+    account_base_url: str
+    token_source: str
+
+
 class CallInsightSourcePayload(BaseModel):
     system: str = Field(min_length=2, max_length=120)
     call_record_id: Optional[str] = Field(default=None, max_length=120)

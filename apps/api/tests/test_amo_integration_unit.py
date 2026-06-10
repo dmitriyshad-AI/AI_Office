@@ -15,6 +15,7 @@ import app.amo_integration as amo_module  # noqa: E402
 from app.amo_integration import (  # noqa: E402
     AmoIntegrationError,
     build_custom_fields_values,
+    create_lead_common_note,
     exchange_callback_code,
     fetch_contact_field_catalog,
     get_active_connection,
@@ -44,6 +45,7 @@ def make_settings(**overrides):
         "crm_amo_oauth_description": "amo integration",
         "crm_amo_oauth_logo_url": None,
         "crm_amo_oauth_account_base_url": "https://educent.amocrm.ru",
+        "crm_amo_note_allowed_lead_ids": ("49832125",),
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -453,3 +455,67 @@ def test_apply_token_payload_and_record_external_secrets_validation(monkeypatch)
     with pytest.raises(AmoIntegrationError) as secrets_exc:
         record_external_secrets(session, payload={"state": "missing-secrets"})
     assert secrets_exc.value.status_code == 400
+
+
+def test_create_lead_common_note_uses_oauth_context_and_allowlist(monkeypatch):
+    monkeypatch.setattr(amo_module, "settings", make_settings())
+    session = make_session()
+    requests: list[dict] = []
+
+    monkeypatch.setattr(
+        amo_module,
+        "resolve_amo_access_context",
+        lambda db: amo_module.AmoAccessContext(
+            account_base_url="https://educent.amocrm.ru",
+            access_token="access-token",
+            token_source="oauth",
+            connection=None,
+        ),
+    )
+
+    def fake_http_request(**kwargs):
+        requests.append(kwargs)
+        return {"_embedded": {"notes": [{"id": 9001}]}}
+
+    monkeypatch.setattr(amo_module, "_amo_http_request", fake_http_request)
+
+    result = create_lead_common_note(
+        session,
+        lead_id=49832125,
+        text="ЧЕРНОВИК БОТА, не отправлено",
+    )
+
+    assert result["lead_id"] == 49832125
+    assert result["note_id"] == 9001
+    assert result["token_source"] == "oauth"
+    assert requests == [
+        {
+            "method": "POST",
+            "url": "https://educent.amocrm.ru/api/v4/leads/49832125/notes",
+            "headers": {"Authorization": "Bearer access-token"},
+            "body": [
+                {
+                    "note_type": "common",
+                    "params": {"text": "ЧЕРНОВИК БОТА, не отправлено"},
+                }
+            ],
+        }
+    ]
+
+
+def test_create_lead_common_note_rejects_non_allowlisted_lead_before_http(monkeypatch):
+    monkeypatch.setattr(
+        amo_module,
+        "settings",
+        make_settings(crm_amo_note_allowed_lead_ids=("49832125", "111")),
+    )
+    session = make_session()
+    requests: list[dict] = []
+
+    monkeypatch.setattr(amo_module, "_amo_http_request", lambda **kwargs: requests.append(kwargs))
+
+    with pytest.raises(AmoIntegrationError) as exc_info:
+        create_lead_common_note(session, lead_id=111, text="blocked")
+
+    assert exc_info.value.status_code == 403
+    assert requests == []

@@ -105,6 +105,17 @@ def test_amocrm_integrations_routes_cover_secrets_callback_status_and_sync(monke
         "fetch_contact_field_catalog",
         lambda db, force_refresh: [{"id": 101, "name": "Id Tallanto"}],
     )
+    monkeypatch.setattr(
+        integrations_router,
+        "create_lead_common_note",
+        lambda db, lead_id, text: {
+            "lead_id": lead_id,
+            "note_id": 9001,
+            "account_base_url": "https://educent.amocrm.ru",
+            "token_source": "oauth",
+            "amo_response": {"_embedded": {"notes": [{"id": 9001}]}},
+        },
+    )
 
     with TestClient(main_module.app) as client:
         secrets_response = client.post(
@@ -141,6 +152,40 @@ def test_amocrm_integrations_routes_cover_secrets_callback_status_and_sync(monke
         )
         assert sync_response.status_code == 200
         assert sync_response.json()["field_count"] == 1
+
+        note_without_key = client.post(
+            "/api/integrations/amocrm/leads/49832125/notes",
+            json={"text": "ЧЕРНОВИК БОТА, не отправлено"},
+        )
+        assert note_without_key.status_code == 401
+
+        note_wrong_key = client.post(
+            "/api/integrations/amocrm/leads/49832125/notes",
+            headers={"X-API-Key": "wrong"},
+            json={"text": "ЧЕРНОВИК БОТА, не отправлено"},
+        )
+        assert note_wrong_key.status_code == 401
+
+        note_query_key = client.post(
+            "/api/integrations/amocrm/leads/49832125/notes?api_key=test-key",
+            json={"text": "ЧЕРНОВИК БОТА, не отправлено"},
+        )
+        assert note_query_key.status_code == 401
+
+        note_response = client.post(
+            "/api/integrations/amocrm/leads/49832125/notes",
+            headers={"X-API-Key": "test-key"},
+            json={"text": "ЧЕРНОВИК БОТА, не отправлено"},
+        )
+        assert note_response.status_code == 200
+        assert note_response.json() == {
+            "status": "ok",
+            "summary": "Примечание amoCRM создано.",
+            "lead_id": 49832125,
+            "note_id": 9001,
+            "account_base_url": "https://educent.amocrm.ru",
+            "token_source": "oauth",
+        }
 
 
 @pytest.mark.anyio
@@ -283,3 +328,11 @@ def test_amocrm_integrations_routes_cover_error_branches(monkeypatch, tmp_path):
         )
         assert sync_failed.status_code == 502
         assert sync_failed.json()["detail"] == "sync failed"
+
+        note_failed = client.post(
+            "/api/integrations/amocrm/leads/111/notes",
+            headers={"X-API-Key": "test-key"},
+            json={"text": "blocked"},
+        )
+        assert note_failed.status_code == 403
+        assert note_failed.json()["detail"] == "AMO lead is not allowlisted for note writes."

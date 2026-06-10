@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import secrets
+from typing import Optional
 from urllib import parse as url_parse
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.amo_integration import (
     AmoIntegrationError,
+    create_lead_common_note,
     exchange_callback_code,
     fetch_contact_field_catalog,
     get_active_connection,
@@ -17,16 +20,44 @@ from app.amo_integration import (
     refresh_connection_tokens,
 )
 from app.auth import require_api_key
+from app.config import get_settings
 from app.db import get_db
 from app.schemas import (
     AmoContactFieldSyncResponse,
     AmoIntegrationRefreshResponse,
     AmoIntegrationSecretsWebhookResponse,
     AmoIntegrationStatusRead,
+    AmoLeadNoteCreateRequest,
+    AmoLeadNoteCreateResponse,
 )
 
 
 router = APIRouter(prefix="/integrations/amocrm", tags=["amoCRM integration"])
+
+
+def _require_amo_note_api_key(
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+) -> None:
+    settings = get_settings()
+    tokens: list[str] = []
+    if settings.api_key:
+        tokens.append(settings.api_key)
+    for spec in settings.api_keys:
+        token = str(spec or "").split(":", 1)[0].strip()
+        if token:
+            tokens.append(token)
+
+    if not tokens:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI Office API key is not configured.",
+        )
+    if x_api_key and any(secrets.compare_digest(x_api_key, token) for token in tokens):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing or invalid API key.",
+    )
 
 
 async def _parse_request_payload(request: Request) -> dict:
@@ -221,6 +252,32 @@ def amo_contact_fields_sync(
             summary="Каталог полей контактов amoCRM синхронизирован.",
             field_count=len(fields),
             synced_at=connection.contact_field_catalog_synced_at if connection is not None else None,
+        )
+    except AmoIntegrationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.post(
+    "/leads/{lead_id}/notes",
+    response_model=AmoLeadNoteCreateResponse,
+    dependencies=[Depends(_require_amo_note_api_key)],
+)
+def amo_lead_note_create(
+    lead_id: int,
+    payload: AmoLeadNoteCreateRequest,
+    db: Session = Depends(get_db),
+) -> AmoLeadNoteCreateResponse:
+    try:
+        result = create_lead_common_note(db, lead_id=lead_id, text=payload.text)
+        db.commit()
+        return AmoLeadNoteCreateResponse(
+            status="ok",
+            summary="Примечание amoCRM создано.",
+            lead_id=result["lead_id"],
+            note_id=result.get("note_id"),
+            account_base_url=result["account_base_url"],
+            token_source=result["token_source"],
         )
     except AmoIntegrationError as exc:
         db.rollback()
