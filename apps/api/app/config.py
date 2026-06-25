@@ -70,6 +70,7 @@ class Settings:
     crm_amo_oauth_logo_url: Optional[str]
     crm_amo_oauth_account_base_url: Optional[str]
     crm_amo_note_allowed_lead_ids: Tuple[str, ...]
+    crm_amo_note_allow_all_leads: bool
     crm_analysis_mode: str
 
 
@@ -237,6 +238,10 @@ def get_settings() -> Settings:
         crm_amo_oauth_account_base_url=os.getenv("CRM_AMO_OAUTH_ACCOUNT_BASE_URL") or None,
         crm_amo_note_allowed_lead_ids=_parse_csv(
             os.getenv("CRM_AMO_NOTE_ALLOWED_LEAD_IDS", "49832125,47854947")
+        ),
+        crm_amo_note_allow_all_leads=_parse_bool(
+            os.getenv("CRM_AMO_NOTE_ALLOW_ALL_LEADS"),
+            False,
         ),
         crm_analysis_mode=os.getenv("CRM_ANALYSIS_MODE", "heuristic"),
     )

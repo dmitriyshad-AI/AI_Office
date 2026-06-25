@@ -741,6 +741,10 @@ def _resolve_note_allowed_lead_ids() -> frozenset[int]:
     return frozenset(allowed_ids)
 
 
+def _note_write_all_leads_allowed() -> bool:
+    return bool(getattr(settings, "crm_amo_note_allow_all_leads", False))
+
+
 def _extract_created_note_id(payload: dict[str, Any]) -> Optional[int]:
     direct_id = payload.get("id")
     if direct_id is not None:
@@ -772,7 +776,7 @@ def create_lead_common_note(
     text: str,
 ) -> dict[str, Any]:
     normalized_lead_id = int(lead_id)
-    if (
+    if not _note_write_all_leads_allowed() and (
         normalized_lead_id not in AMO_NOTE_HARD_ALLOWED_LEAD_IDS
         or normalized_lead_id not in _resolve_note_allowed_lead_ids()
     ):

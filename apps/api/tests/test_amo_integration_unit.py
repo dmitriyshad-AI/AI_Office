@@ -547,3 +547,39 @@ def test_create_lead_common_note_rejects_non_allowlisted_lead_before_http(monkey
 
     assert exc_info.value.status_code == 403
     assert requests == []
+
+
+def test_create_lead_common_note_can_allow_all_leads_for_draft_notes(monkeypatch):
+    monkeypatch.setattr(
+        amo_module,
+        "settings",
+        make_settings(
+            crm_amo_note_allowed_lead_ids=("49832125",),
+            crm_amo_note_allow_all_leads=True,
+        ),
+    )
+    session = make_session()
+    requests: list[dict] = []
+
+    monkeypatch.setattr(
+        amo_module,
+        "resolve_amo_access_context",
+        lambda db: amo_module.AmoAccessContext(
+            account_base_url="https://educent.amocrm.ru",
+            access_token="access-token",
+            token_source="oauth",
+            connection=None,
+        ),
+    )
+    monkeypatch.setattr(amo_module, "_amo_http_request", lambda **kwargs: requests.append(kwargs) or {"id": 9003})
+
+    result = create_lead_common_note(
+        session,
+        lead_id=111,
+        text="ЧЕРНОВИК БОТА, не отправлено",
+    )
+
+    assert result["lead_id"] == 111
+    assert result["note_id"] == 9003
+    assert requests[0]["method"] == "POST"
+    assert requests[0]["url"] == "https://educent.amocrm.ru/api/v4/leads/111/notes"
